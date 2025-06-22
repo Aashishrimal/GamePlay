@@ -171,8 +171,7 @@
             </div>
 
             <div class="button-group">
-                <button id="resetButton" disabled>Reset Game</button>
-                <button id="undoButton" disabled>Undo Move</button>
+                <button id="resignButton" disabled>Resign Game</button>
             </div>
         </div>
     </div>
@@ -184,8 +183,7 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         // Removed: const messageBox = document.getElementById('messageBox'); 
-        const resetButton = document.getElementById('resetButton');
-        const undoButton = document.getElementById('undoButton');
+        const resignButton = document.getElementById('resignButton');
         const gameTitle = document.getElementById('gameTitle');
         
         const residingGoatsContainer = document.getElementById('residingGoatsContainer');
@@ -242,8 +240,7 @@
         socket.on('gameStart', (data) => {
             playerRole = data.role;
             room = data.room;
-            resetButton.disabled = false;
-            undoButton.disabled = false;
+            resignButton.disabled = false;
             canvas.addEventListener('click', handleClick);
             updateLocalState(data.state, null);
             updateTitleStyle();
@@ -267,16 +264,18 @@
 
         socket.on('opponentDisconnected', (message) => {
             gameOver = true;
-            // displayMessage(message, 'Game Over.', 'Please refresh to play again.'); // Removed message box
-            showToast(message || "Your opponent has disconnected.", 7000);
-            resetButton.disabled = true;
-            undoButton.disabled = true;
+            showToast("Your opponent has disconnected and resigned. You win!", 7000);
+            resignButton.disabled = true;
             canvas.removeEventListener('click', handleClick);
             resetTitleStyle();
             resetCanvasBorderColor();
             updateGoatStatusDisplays(0, 0);
         });
         
+        socket.on('showToast', (message) => {
+            showToast(message, 5000);
+        });
+
         // --- HELPER FUNCTIONS ---
         // Removed displayMessage function as messageBox is gone
         // function displayMessage(msg1, msg2 = '', msg3 = '') {
@@ -291,7 +290,7 @@
             
             if (winner) {
                 // displayMessage(`${winner} wins!`, '', 'Click Reset to start a new game.'); // Removed message box
-                showToast(`${winner} wins! Click Reset to start a new game.`, 7000); // Use toast for game end
+                showToast(`${winner} wins! Click Resign to start a new game.`, 7000); // Use toast for game end
                 canvas.removeEventListener('click', handleClick);
                 resetTitleStyle();
                 resetCanvasBorderColor();
@@ -500,8 +499,11 @@
             }
         }
 
-        resetButton.addEventListener('click', () => socket.emit('resetGame', { room }));
-        undoButton.addEventListener('click', () => socket.emit('undoMove', { room }));
+        resignButton.addEventListener('click', () => {
+            if (confirm("Are you sure you want to resign? Your opponent will win.")) {
+                socket.emit('resignGame', { room });
+            }
+        });
 
         // --- INITIALIZATION ---
         Promise.all([

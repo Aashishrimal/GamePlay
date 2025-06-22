@@ -24,32 +24,8 @@ class BaghchalBoard {
         this.goats_placed = 0;
         this.goats_killed = 0;
         this.turn = 'G'; // 'T' for Tiger, 'G' for Goat
-        this.state_history = [];
         this.selected_goat = null;
         this.selected_tiger = null;
-    }
-
-    saveState() {
-        this.state_history.push({
-            board: JSON.parse(JSON.stringify(this.board)),
-            goats_placed: this.goats_placed,
-            goats_killed: this.goats_killed,
-            turn: this.turn
-        });
-    }
-
-    undoMove() {
-        if (this.state_history.length > 0) {
-            const prevState = this.state_history.pop();
-            this.board = prevState.board;
-            this.goats_placed = prevState.goats_placed;
-            this.goats_killed = prevState.goats_killed;
-            this.turn = prevState.turn;
-            this.selected_goat = null; // Selections are client-side, but reset them
-            this.selected_tiger = null;
-            return true;
-        }
-        return false;
     }
 
     is_even(number) { return number % 2 === 0; }
@@ -95,7 +71,6 @@ class BaghchalBoard {
     }
 
     make_move(start_row, start_col, end_row, end_col) {
-        this.saveState();
         if (this.turn === 'G' && this.goats_placed < 20) {
             this.board[end_row][end_col] = 'G';
             this.goats_placed++;
@@ -199,20 +174,20 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('resetGame', (data) => {
+    socket.on('resignGame', (data) => {
         const { room } = data;
-        if (gameRooms[room]) {
-            gameRooms[room].game = new BaghchalBoard();
-            io.to(room).emit('gameStateUpdate', { state: gameRooms[room].game, winner: null });
-        }
+        const gameRoom = gameRooms[room];
+        if (!gameRoom) return;
+
+        const resigningPlayerRole = gameRoom.players[socket.id];
+        const winningPlayerRole = (resigningPlayerRole === 'G') ? 'Tiger' : 'Goat';
+
+        io.to(room).emit('showToast', `${resigningPlayerRole === 'G' ? 'Goat' : 'Tiger'} has resigned. ${winningPlayerRole} wins!`);
+
+        gameRooms[room].game = new BaghchalBoard(); // Reset the game
+        io.to(room).emit('gameStateUpdate', { state: gameRooms[room].game, winner: null });
     });
 
-    socket.on('undoMove', (data) => {
-        const { room } = data;
-        if (gameRooms[room] && gameRooms[room].game.undoMove()) {
-             io.to(room).emit('gameStateUpdate', { state: gameRooms[room].game, winner: null });
-        }
-    });
 
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
@@ -222,7 +197,12 @@ io.on('connection', (socket) => {
         // Also handle disconnection from a room
         for (const room in gameRooms) {
             if (gameRooms[room].players[socket.id]) {
+                const disconnectedPlayerRole = gameRooms[room].players[socket.id];
+                const winningPlayerRole = (disconnectedPlayerRole === 'G') ? 'Tiger' : 'Goat';
                 io.to(room).emit('opponentDisconnected', 'Your opponent has disconnected.');
+                io.to(room).emit('showToast', `${disconnectedPlayerRole === 'G' ? 'Goat' : 'Tiger'} has disconnected and resigned. ${winningPlayerRole} wins!`);
+                gameRooms[room].game = new BaghchalBoard(); // Reset the game state
+                io.to(room).emit('gameStateUpdate', { state: gameRooms[room].game, winner: null });
                 delete gameRooms[room]; // Clean up the room
             }
         }
